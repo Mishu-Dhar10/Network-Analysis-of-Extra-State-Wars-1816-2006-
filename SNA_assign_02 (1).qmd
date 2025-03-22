@@ -1,0 +1,419 @@
+---
+title: "Network Analysis"
+author: "Mishu"
+format: pdf
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## 
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(igraph)
+library(threejs)
+library(igraph)
+```
+
+```{r}
+library(sna)
+```
+
+```{r}
+ex_state <- read.csv("/Users/mishudhar/Desktop/Social Network analysis/Extra-StateWarData_v4.0 (1).csv")
+head(ex_state)
+# checking the existence of missing values
+colSums(is.na(ex_state))
+nrow(ex_state)
+```
+
+# Creating new variables
+
+To enhance the analysis, I extracted a subset of data from the original dataframe, comprising nodes (SideA and SideB) and additional edge attributes. A new variable, "total_death," is derived from the "Batdeath" and "NonstateDeath" variables. This variable is added as edge attributes by indicating the total number of casualties, providing insight into the intensity of connections within the graph object. In cases where information was missing (-8 or -9), the resulting variable may lack data for certain events. Nonetheless, for the sake of analytical simplicity, I did not bring any change here.
+
+Another variable, "duration," was generated from the "startYear" and "endYear" variables. Instances where wars initiated and concluded within the same year were considered to have a duration of one year. Notably, -7 was identified as a placeholder for missing information regarding ongoing wars. Given that the dataset was compiled in 2006, I assumed that such conflicts had concluded by that time. For instance, if a war was labeled "Afghan Resistance," -7 was replaced with 2022 to reflect the withdrawal of the American army from Afghanistan. Similarly, for wars labeled "Iraqi Resistance," -7 was substituted with the end year 2013. These are information I collected from internet. However, for missing information (-8) pertaining to Side A and Side B, no adjustments are made. Given the historical context of colonial and imperial wars spanning over 200 years, it was deemed impractical to accurately replace missing data with specific participants. Therefore, these values remained unchanged (-8, indicating missing information).
+
+# Theoretical Argument
+
+I set up the network as an undirected one. Each edge between the vertices represents their involvement in a war. Since some parties (vertices or nodes) were involved in multiple wars, there might be multiple edges between them.
+
+Given that the dataset consists of colonial and imperial war data, I expect to see high connectivity among countries that were imperialist, such as the United Kingdom, France, Portugal, and the Netherlands. These countries are likely to be the most influential nodes in the network.
+
+In more recent times, countries like the USA, Afghanistan, and Iraq have been involved in numerous conflicts. Therefore, I anticipate that these countries will also emerge as highly connected nodes in the network.
+
+# Data Preparation
+
+```{r}
+# Replace -7 in 'EndYear1' based on 'WarName'
+ex_state$EndYear1 <- ifelse(ex_state$WarName == "Afghan Resistance" & ex_state$EndYear1 == -7, 2022,
+                            ifelse(ex_state$WarName == "Iraqi Resistance" & ex_state$EndYear1 == -7, 2013,
+                                   ex_state$EndYear1))
+
+# Verify the changes
+unique(ex_state$EndYear1)
+```
+
+```{r}
+# copying the data frame into a new data frame to keep the main data intact
+df <- ex_state
+
+# creating a new variable (duration in year)
+df$duration <- (df$EndYear1 - df_practice$StartYear1) + 1
+
+# creating a new variable total death from the war
+df$total_Death <- df$BatDeath + df$NonStateDeaths
+
+
+# creating a new data frame by filtering two parties (sideA and sideB) to add as nodes in the graph object
+Nodes <- df %>%
+  select(SideA, SideB)
+
+# creating a new data frame by filtering newly created variables duration and total death to ass as edge attributes
+Edges <- df %>%
+  select(duration, total_Death)
+
+# creating graph object, undirected network
+object_1 <- graph_from_data_frame(Nodes, directed = FALSE)
+dura <- Edges$duration
+death <- Edges$total_Death
+
+# adding edge atrributes
+object_1 <- set_edge_attr(object_1, "duration_year", value = dura)
+object_1 <- set_edge_attr(object_1, "total_death", value = death)
+```
+
+# Task 02 Historical Period, Nature and Descriptive Statistics
+
+Historical Period: The Extra-State War Data from the Correlates of War (COW) project covers historical periods from the early 19th century to the present day. It includes data on conflicts involving non-state actors, such as rebel groups, insurgencies, and militias, as well as conflicts between states and non-state actors. The specific historical periods covered are from 1816 to 2004 (starting year) and ending year 2004. However, I added 2022 and 2013 as the ending year for Afghan and Iraq year for the simplicity of network analysis. I have mentioned the logic of doing this in the data preparation section.
+
+Nature of Ties: The ties in the network represent instances where parties were involved in war at least once. It is assumed that there may be multiple ties between the same two vertices. This is because countries like the United Kingdom and France, which had colonies, were involved in multiple battles with the same entities. For example, the United Kingdom had several conflicts with various Indian states(several times), while France had engagements with Algeria, among others.
+
+```{r}
+stat_table <- data.frame(number_of_nodes = gorder(object_1),
+                         number_of_ties = gsize(object_1),
+                         graph_density = graph.density(object_1),
+                         avg_path_length = mean_distance(object_1, directed = FALSE))
+                         #std_degree = sd(degree(object_1)))
+
+stat_table
+
+```
+
+Interpretation:
+
+There are total 163 Nodes and 198 ties in this network.
+
+Density measures how interconnected the nodes are in the network, representing the proportion of potential edges that are actually present in the network. It ranges from 0 to 1. In this, graph density is approximately 0.015, indicating a relatively sparse network. This suggests that only about 1.5% of all possible connections between nodes are realized in the network.
+
+The average path length average shortest path length between all pairs of nodes in the network. Here, avg_path_length is approximately 3.481. It signifies that, on average, it takes about 3.481 steps to traverse from one node to another in the network, considering all possible paths.
+
+Isolates: as each edge between the vertices at least one engagement in the war, from the nature of the data it is evident that there is no isolate ( a node which is not connected to any of the nodes) in the network
+
+```{r}
+# Identify key nodes using eigenvector centrality
+key_node_war <- eigen_centrality(object_1, directed = FALSE)
+which.max(key_node_war$vector)
+```
+
+# Task 03: Plotting with various Attributes
+
+```{r}
+plot(object_1,
+     vertex.label.color = "black",
+     vertex.label.cex = 0.5,
+     vertex.label.dist = 2,
+     vertex.size = 4,
+     main = "Extra State War Network")
+```
+
+Figure: Based on most influential nodes, eigenvector centrality, takes into account the connections of a node and the connections of its neighbors. By identifying nodes that are connected to other well-connected nodes, this measurement helps reveal powerful or influential individuals in a network. In this case Nodes (States) that were engages in war more than others.
+
+```{r}
+# Identify key nodes using eigenvector centrality
+key_nodes_war <- eigen_centrality(object_1)
+which.max(key_nodes_war$vector)
+
+# Plot Network
+plot(object_1,
+     vertex.label.color = "black", 
+     vertex.label.cex = 0.7,
+     vertex.size = 20*(key_nodes_war$vector),
+     edge.color = 'gray88',
+     layout = layout_nicely(object_1),
+     vertex.label.dist = 0.05,
+     main = "Extra State War Network- Influential Nodes"
+)
+```
+
+Plotting with Edge attributes, based on the duration of the war, if the war is longer than 10 years, the edge color should be blue, otherwise red.
+
+```{r}
+# adding color based on the edge attribures
+edge_color <- ifelse(E(object_1)$duration_year > 10, "blue", "red")
+# add black labels to each vertex
+plot(object_1, vertex.label.color = "black",
+     vertex.label.cex = 0.7,
+     vertex.size = 4,
+     edge.color = edge_color,
+     main = "War Duration")
+
+# legend labels and colors
+legend_labels <- c("Duration > 10", "Duration <= 10")
+legend_colors <- c("blue", "red")
+
+# Adding legend
+legend("topright",
+       legend = legend_labels,
+       fill = legend_colors,
+       title = "War Duration",
+       cex = 0.6)
+```
+
+Using some default igraph Visualizations
+
+```{r}
+#plot(object_1, layout = layout.fruchterman.reingold(object_1))
+# Customize the plot appearance
+plot(object_1, 
+     layout = layout.fruchterman.reingold(object_1),
+     vertex.label.color = "black",
+     vertex.size = 5, 
+     vertex.frame.color = "white",  
+     vertex.color = "lightblue",
+     vertex.label.cex = 0.8,
+     edge.width = 2,
+     edge.color = "black",
+     main = "Colonial and Imperial War Network"
+)
+```
+
+```{r}
+# Plot the graph object g1 using igraph's chosen layout 
+m1 <- layout_nicely(object_1)
+#plot(object_1, vertex.label.color = "black", layout = m1)
+
+# Customize the plot appearance
+plot(object_1, 
+     vertex.label.color = "black",
+     layout = m1,  
+     vertex.size = 10,  
+     vertex.frame.color = "white",
+     vertex.color = "skyblue",  
+     vertex.label.cex = 0.8,
+     edge.width = 2,  
+     edge.color = "gray"  
+)
+
+```
+
+The ticker the edge is, the longer the war was.
+
+```{r}
+# Create a vector of weights based on the duration of years
+w1 <- E(object_1)$duration_year
+# Plot the network varying edges by weights
+m1 <- layout_nicely(object_1)
+plot(object_1, 
+        vertex.label.color = "black", 
+        edge.color = 'black',
+        edge.width = w1 * 0.1,
+        layout = m1,
+     vertex.size = 5,
+     vertex.label.cex = 0.8,
+     main = "War Network- Duration")
+
+```
+
+Deleting Edges: Deleting Edges to visualize war longer than three years.
+
+```{r}
+# creating a new graph object where duration of the war if less than 2 years
+object_2 <- delete_edges(object_1, E(object_1)[duration_year < 2])
+# Plot the new graph 
+w2 <- E(object_2)$duration_year
+m2 <- layout_with_fr(object_2)
+plot(object_2, 
+     vertex.label.color = "black", 
+     edge.color = 'black',
+     edge.width = w2 * 0.1,
+     layout = m2,
+     vertex.label.cex = 0.8,
+     #vertex.label.dist = 4,
+     vertex.size = 7,
+     vertex.color = "grey88",
+     main = "War Longer than Two Years")
+```
+
+```{r}
+# Set a threshold to identify important nodes
+threshold <- quantile(object_betweenness, 0.9)  
+
+# Identifying important nodes based on betweenness centrality
+important_nodes <- V(object_1)$name[object_betweenness >= threshold]
+
+# Subset the graph to include only important nodes and their incident edges
+# removing others
+important_graph <- delete_vertices(object_1, V(object_1)[!V(object_1)$name %in% important_nodes])
+
+# Plot the important nodes
+plot(important_graph,
+      edge.color = 'black', 
+     vertex.size = 5, 
+     edge.arrow.size = 0.05,
+     main = "Influential Nodes-  Base on Betweenness Centrality")
+
+```
+
+```{r}
+# Set a threshold to identify important nodes
+threshold <- quantile(object_betweenness, 0.9)
+
+# Identifying important nodes based on betweenness centrality
+important_nodes <- V(object_1)$name[object_betweenness >= threshold]
+
+# Subset the graph to include only important nodes and their incident edges
+# removing others
+important_graph <- delete_vertices(object_1, V(object_1)[!V(object_1)$name %in% important_nodes])
+
+# Plot the important nodes
+plot(important_graph,
+     edge.color = 'black',
+     #as the values are high, so multiplying to reduce the sizes
+     vertex.size = sqrt(object_betweenness[important_nodes]) * 0.5,
+     vertex.size = 5,  
+     edge.arrow.size = 0.05,
+     main = "Inlfluential Nodes- War Network")
+```
+
+In network analysis, a clique is a subset of vertices within a graph where every vertex is directly connected to every other vertex in the subset. In simpler terms, it's a group of nodes where each node is directly connected to every other node within that group.
+
+More formally, a clique is a fully connected subgraph within a larger graph. The size of a clique is defined by the number of vertices it contains. For example, a 3-clique consists of three vertices where each vertex is connected to the other two.
+
+```{r}
+# Assign largest cliques output to object 'lc'
+largest_CLIQUES <- largest_cliques(object_1)
+
+# Create two new undirected subgraphs, each containing only the vertices of each largest clique.
+gs1 <- as.undirected(subgraph(object_1, largest_CLIQUES[[1]]))
+gs2 <- as.undirected(subgraph(object_1, largest_CLIQUES[[2]]))
+
+# plot
+plot(gs1,
+     vertex.label.color = "black", 
+     vertex.label.cex = 0.9,
+     vertex.size = 0,
+     edge.color = 'gray28',
+     main = "Largest Clique 1",
+     layout = layout.circle(gs1)
+)
+
+```
+
+Figure- Largest Clique - 02
+
+```{r}
+plot(gs2,
+     vertex.label.color = "black", 
+     vertex.label.cex = 0.9,
+     vertex.size = 0,
+     edge.color = 'gray28',
+     main = "Largest Clique 2",
+     layout = layout.circle(gs1)
+)
+```
+
+# Task 04- Community Detection
+
+Identifying cliques and calculating assortativity and reciprocity provide us with some information as to patterns of vertex association in a network. A more formal way of achieving this is through community detection. If a network is said to have a community structure then it is possible to assign vertices to unique sets. Within each set of vertices, the connections between members will be more dense than the connections between different sets of vertices
+
+```{r}
+# Cluster fast greedy commmunity detection works graph without multi-edges.
+# I got error, so creating a new simplified graph object only for this task
+# Creating a simplified graph object
+
+
+simplified_object <- simplify(object_1)
+fast_greedy <- cluster_fast_greedy(simplified_object)
+```
+
+```{r}
+plot(fast_greedy, simplified_object,
+     vertex.size = 7,
+     vertex.label.cex = 0.5,
+     main = "Community Detection- Fast Greedy")
+```
+
+```{r}
+# Perform edge-betweenness community detection on network graph
+edge_betn_community <- cluster_edge_betweenness(object_1)
+# plot
+plot(edge_betn_community, object_1,
+     vertex.size = 7,
+     vertex.label.cex = 0.5,
+     main = "Community Detection- Edge Betweenness")
+
+```
+
+```{r}
+louvain_communities <- cluster_louvain(object_1)
+plot(louvain_communities, object_1,
+     vertex.size = 7,
+     vertex.label.cex = 0.5,
+     main = "Community Detection- Louvain")
+```
+
+```{r}
+walktrap_community <- cluster_walktrap(object_1)
+
+plot(walktrap_community, object_1,
+     vertex.size = 8,
+     vertex.label.cex = 0.5,
+     main = "Community Detection- Walktrap")
+```
+
+```{r}
+leiden_community <- cluster_leiden(object_1)
+plot(leiden_community, object_1,
+     vertex.size = 7,
+     vertex.label.cex = 0.5,
+     main = "Community Detection- Leiden")
+```
+
+# Task 05- Comparison between the community detection algorithms
+
+```{r}
+length(leiden_community)
+length(louvain_communities)
+length(walktrap_community)
+length(edge_betn_community)
+length(fast_greedy)
+cat("Leiden Community Length:", length(leiden_community), "\n")
+cat("Louvain Communities Length:", length(louvain_communities), "\n")
+cat("Walktrap Community Length:", length(walktrap_community), "\n")
+cat("Edge Betweenness Community Length:", length(edge_betn_community), "\n")
+cat("Fast Greedy Community Length:", length(fast_greedy), "\n")
+
+```
+
+From the figure and from the length it is shown that the Leiden community detection algorithm identified the largest number of communities, indicating that it may have subdivided the network into smaller, more fine-grained communities compared to other algorithms. Choosing a community detection algorithm may vary according to the context or the purpose of the analysis. In my point of view, for this project ( assignment) considering the size of the network Louvain and Walktrap performed better than Leiden. As the Leiden algorithm detected a very large number of communities (153), the figure is very complex to perceive. We are keen to know here which are the most war-prone states, so for that particular purpose, Louvain and Walktrap algorithms detected communities in a better way around the influential nodes such United Kingdom, France, Portugal, Spain, etc.
+
+Finding:
+
+Following the hypothesis, from the statistics and figures above it is evident that countries such as the United Kingdom, France, Portugal, Spain, etc that established colonies overseas are the most influential nodes in this war network and were involved in more wars than others.
+
+Limitation of the Analysis:
+
+As I did not modify the missing information -8 from the participants (sideA and sideB) it is considered a whole state entity, which is clearly misleading. But I don't have the exact historical information to replace it.
+
+For some unknown reason, the arguments degree( ) and betweenness( ) are not working, when I restarted my R studio today. But, yesterday it worked and I stored the value of betweenness as a variable object_betweenness. I uninstalled and reinstalled the R studio again but still, it is not working.
+
+```{r}
+which.max(object_betweenness)
+```
+
+from there I get -8 has the highest betweeness centrality (10).
